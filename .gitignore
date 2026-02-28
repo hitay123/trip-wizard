@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Database (runtime data — not source code)
+data/tripwizard.db
+data/tripwizard.db-shm
+data/tripwizard.db-wal
+
+# Environment variables (contains secrets)
+server/.env
+
+# Build output
+client/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

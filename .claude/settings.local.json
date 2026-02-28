@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(timeout 8 node:*)",
+      "Bash(npm show:*)",
+      "Bash(timeout 6 node:*)",
+      "Bash(node -e:*)",
+      "Bash(npm run build:*)",
+      "Bash(powershell.exe -Command \"[Environment]::GetEnvironmentVariable\\(''PATH'', ''User''\\)\")",
+      "Bash(powershell.exe -Command '$currentPath = [Environment]::GetEnvironmentVariable\\(\"\"PATH\"\", \"\"User\"\"\\); [Environment]::SetEnvironmentVariable\\(\"\"PATH\"\", \"\"$currentPath;$env:USERPROFILE\\\\.local\\\\bin\"\", \"\"User\"\"\\); Write-Host \"\"Done\"\"')",
+      "Bash(powershell.exe -Command \"Test-Path ''$env:USERPROFILE\\\\.local\\\\bin\\\\claude.exe''\")",
+      "Bash(powershell.exe -Command \"Test-Path ''C:\\\\Users\\\\hitay\\\\.local\\\\bin\\\\claude.exe''\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\hitay\\\\.local\\\\bin'' -ErrorAction SilentlyContinue | Select-Object Name\")",
+      "Bash(powershell.exe -Command \"claude --version\")",
+      "Bash(powershell.exe -Command 'Set-Content -Path \"\"C:\\\\Users\\\\hitay\\\\anaconda3\\\\Scripts\\\\claude.bat\"\" -Value \"\"@echo off\\\\r\\\\n\\\\\"\"C:\\\\Users\\\\hitay\\\\.local\\\\bin\\\\claude.exe\\\\\"\" %*\"\"')"
+    ]
+  }
+}

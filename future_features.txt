@@ -1,0 +1,6 @@
+future features to add:
+    1. an explore page, for searching activities on a google map api
+    2. a chat page, for chating with friends.
+    3. make the chat with the bot a group chat.
+    4. an admin page, to control members of the group (add, remove, approve, etc)
+    
