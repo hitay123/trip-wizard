@@ -7,7 +7,7 @@ export function verifyToken(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(payload.userId);
+    const user = db.prepare('SELECT id, name, first_name, last_name, email, role FROM users WHERE id = ?').get(payload.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
     req.user = user;
     next();
@@ -21,7 +21,7 @@ export function optionalAuth(req, res, next) {
   if (token) {
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(payload.userId);
+      const user = db.prepare('SELECT id, name, first_name, last_name, email, role FROM users WHERE id = ?').get(payload.userId);
       if (user) req.user = user;
     } catch { /* not authenticated, continue */ }
   }
@@ -35,7 +35,7 @@ export function requireAdmin(req, res, next) {
 
 export function requireTripAccess(req, res, next) {
   const tripId = req.params.id || req.params.tripId;
-  const trip = db.prepare('SELECT creator_id, visibility FROM trips WHERE id = ?').get(tripId);
+  const trip = db.prepare('SELECT creator_id, visibility, members_can_edit FROM trips WHERE id = ?').get(tripId);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
   const userId = req.user?.id;
@@ -67,4 +67,24 @@ export function requireTripAdmin(req, res, next) {
 
   if (!isAdmin) return res.status(403).json({ error: 'Trip admin access required' });
   next();
+}
+
+// Allows members to edit only if members_can_edit=1; admins can always edit.
+export function requireTripEditAccess(req, res, next) {
+  requireTripAccess(req, res, () => {
+    if (!req.isTripMember) return res.status(403).json({ error: 'Trip membership required' });
+
+    const tripId = req.params.id || req.params.tripId;
+    const userId = req.user?.id;
+    const trip = req.trip;
+
+    const isAdmin = trip.creator_id === userId ||
+      db.prepare("SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ? AND role = 'admin'").get(tripId, userId);
+
+    if (!isAdmin && !trip.members_can_edit) {
+      return res.status(403).json({ error: 'Only trip admins can edit this trip' });
+    }
+
+    next();
+  });
 }

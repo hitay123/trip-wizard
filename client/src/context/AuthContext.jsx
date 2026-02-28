@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
     return user;
   };
 
-  const register = async (name, email, password) => {
-    const { user } = await apiRegister({ name, email, password });
+  const register = async (firstName, lastName, email, password) => {
+    const { user } = await apiRegister({ firstName, lastName, email, password });
     setUser(user);
     return user;
   };

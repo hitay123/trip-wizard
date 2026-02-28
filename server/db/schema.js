@@ -89,6 +89,30 @@ db.exec(`
   );
 `);
 
+// ── Migrations (idempotent — safe to run on every start) ──────────────────────
+
+for (const stmt of [
+  'ALTER TABLE users ADD COLUMN first_name TEXT',
+  'ALTER TABLE users ADD COLUMN last_name TEXT',
+  'ALTER TABLE trips ADD COLUMN members_can_edit INTEGER NOT NULL DEFAULT 1',
+  'ALTER TABLE trips ADD COLUMN members_can_chat INTEGER NOT NULL DEFAULT 1',
+]) {
+  try { db.exec(stmt); } catch { /* column already exists — skip */ }
+}
+
+// Backfill first_name / last_name from existing name column
+db.prepare(`
+  UPDATE users
+  SET
+    first_name = CASE WHEN instr(name, ' ') > 0
+                      THEN substr(name, 1, instr(name, ' ') - 1)
+                      ELSE name END,
+    last_name  = CASE WHEN instr(name, ' ') > 0
+                      THEN substr(name, instr(name, ' ') + 1)
+                      ELSE '' END
+  WHERE first_name IS NULL
+`).run();
+
 // ── Trip code generator ────────────────────────────────────────────────────────
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O, 0, I, 1 (ambiguous)

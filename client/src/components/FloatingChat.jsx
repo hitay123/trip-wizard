@@ -45,7 +45,27 @@ function Message({ msg, msgIndex, tripId }) {
             <p className="text-xs mt-1.5 opacity-60">⏳ Rate limited — try again shortly</p>
           )}
         </div>
-        {!isUser && msg.plan && (
+
+        {/* Multiple plan suggestions (new format) */}
+        {!isUser && msg.plans?.length > 0 && (
+          <div className="mt-1 space-y-1">
+            <p className="text-xs text-slate-400 px-1 mt-2">Choose a plan to add to your itinerary:</p>
+            {msg.plans.map((item, idx) => (
+              <PlanCard
+                key={idx}
+                plan={item.plan}
+                label={item.label}
+                colorIndex={idx}
+                tripId={tripId}
+                messageIndex={msgIndex}
+                onApproved={() => {}} // each card is independent — no dismissing others
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Single plan (legacy format) */}
+        {!isUser && msg.plan && !msg.plans && (
           <PlanCard
             plan={msg.plan}
             tripId={tripId}
@@ -127,6 +147,7 @@ export default function FloatingChat() {
         role: 'assistant',
         content: result.content,
         plan: result.plan || null,
+        plans: result.plans || null,   // multi-plan array
         isMock: result.isMock,
         rateLimited: result.rateLimited,
       });
@@ -164,7 +185,7 @@ export default function FloatingChat() {
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-5rem)] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
+        <div className="fixed bottom-5 right-5 z-50 w-[400px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-5rem)] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-600 to-blue-700">
             <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-lg">🧙</div>

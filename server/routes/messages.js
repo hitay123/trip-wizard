@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken, requireTripMember } from '../middleware/auth.js';
-import { getMessages, saveMessage, getTripById } from '../db/storage.js';
+import { getMessages, saveMessage, getTripById, isTripAdmin } from '../db/storage.js';
 import { chatWithAssistant } from '../services/gemini.js';
 
 const router = Router();
@@ -24,9 +24,17 @@ router.post('/:id/messages', verifyToken, requireTripMember, async (req, res) =>
 
     const chatType = req.query.type === 'ai' ? 'ai' : 'group';
     const tripId = req.params.id;
+    const userId = req.user.id;
+
+    // Check if members can chat (admins always can)
+    const trip = getTripById(tripId);
+    const isAdmin = isTripAdmin(tripId, userId);
+    if (!trip.membersCanChat && !isAdmin) {
+      return res.status(403).json({ error: 'Only admins can send messages in this trip' });
+    }
 
     // Save user message
-    const userMsg = saveMessage(tripId, req.user.id, chatType, content.trim());
+    const userMsg = saveMessage(tripId, userId, chatType, content.trim());
 
     if (chatType === 'ai') {
       // Fetch last 20 messages as history for context
@@ -35,7 +43,6 @@ router.post('/:id/messages', verifyToken, requireTripMember, async (req, res) =>
         content: m.content,
       }));
 
-      const trip = getTripById(tripId);
       const aiResponse = await chatWithAssistant({
         messages: history,
         trip,
@@ -51,6 +58,7 @@ router.post('/:id/messages', verifyToken, requireTripMember, async (req, res) =>
         userMessage: userMsg,
         aiMessage: aiMsg,
         plan: aiResponse.plan || null,
+        plans: aiResponse.plans || null,
       });
     }
 

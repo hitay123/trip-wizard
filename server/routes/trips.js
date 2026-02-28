@@ -3,13 +3,13 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   getAllTrips, getTripById, createTrip, updateTrip, deleteTrip,
   addDayEntry, updateDayEntry, deleteDayEntry,
-  getTripMembers, isTripMember, isTripAdmin,
+  getTripMembers, isTripMember, isTripAdmin, setMemberRole,
   createJoinRequest, getJoinRequests, resolveJoinRequest,
   createNotification,
 } from '../db/storage.js';
 import db from '../db/schema.js';
 import {
-  verifyToken, optionalAuth, requireTripMember, requireTripAdmin,
+  verifyToken, optionalAuth, requireTripMember, requireTripAdmin, requireTripEditAccess,
 } from '../middleware/auth.js';
 
 const router = Router();
@@ -136,12 +136,58 @@ router.delete('/:id', verifyToken, requireTripAdmin, (req, res) => {
   }
 });
 
+// PATCH /api/trips/:id/settings  (trip admin — toggle members_can_edit)
+router.patch('/:id/settings', verifyToken, requireTripAdmin, (req, res) => {
+  try {
+    const trip = getTripById(req.params.id);
+    if (!trip) return res.status(404).json({ error: 'Trip not found' });
+    const updated = updateTrip(req.params.id, {
+      ...trip,
+      travelers: trip.travelers || [],
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      membersCanEdit: req.body.membersCanEdit !== undefined ? req.body.membersCanEdit !== false : trip.membersCanEdit,
+      membersCanChat: req.body.membersCanChat !== undefined ? req.body.membersCanChat !== false : trip.membersCanChat,
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Members ───────────────────────────────────────────────────────────────────
 
 // GET /api/trips/:id/members
 router.get('/:id/members', verifyToken, requireTripMember, (req, res) => {
   try {
     res.json(getTripMembers(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/trips/:id/members/:userId/role  (trip admin promotes/demotes)
+router.patch('/:id/members/:userId/role', verifyToken, requireTripAdmin, (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!['admin', 'member'].includes(role)) {
+      return res.status(400).json({ error: "role must be 'admin' or 'member'" });
+    }
+
+    const tripId = req.params.id;
+    const targetUserId = req.params.userId;
+
+    // Can't change the creator's role
+    const trip = getTripById(tripId);
+    if (trip.creatorId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot change the trip creator\'s role' });
+    }
+
+    const member = db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, targetUserId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    setMemberRole(tripId, targetUserId, role);
+    res.json({ success: true, userId: targetUserId, role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -269,7 +315,7 @@ router.patch('/:id/requests/:requestId', verifyToken, requireTripAdmin, (req, re
 
 // ── Days ──────────────────────────────────────────────────────────────────────
 
-router.post('/:id/days', verifyToken, requireTripMember, (req, res) => {
+router.post('/:id/days', verifyToken, requireTripEditAccess, (req, res) => {
   try {
     const { date, location, accommodation, activities, notes } = req.body;
     if (!date) return res.status(400).json({ error: 'date is required' });
@@ -286,17 +332,29 @@ router.post('/:id/days', verifyToken, requireTripMember, (req, res) => {
   }
 });
 
-router.put('/:id/days/:dayId', verifyToken, requireTripMember, (req, res) => {
+router.put('/:id/days/:dayId', verifyToken, requireTripEditAccess, (req, res) => {
   try {
-    const updated = updateDayEntry(req.params.id, req.params.dayId, req.body);
-    if (!updated) return res.status(404).json({ error: 'Day not found' });
+    // Fetch existing day so partial updates (e.g. only activities) don't null out other fields
+    const existing = db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?')
+      .get(req.params.dayId, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Day not found' });
+
+    const merged = {
+      date:          req.body.date          ?? existing.date,
+      location:      req.body.location      ?? existing.location,
+      accommodation: req.body.accommodation !== undefined ? req.body.accommodation : JSON.parse(existing.accommodation),
+      activities:    req.body.activities    !== undefined ? req.body.activities    : JSON.parse(existing.activities),
+      notes:         req.body.notes         ?? existing.notes,
+    };
+
+    const updated = updateDayEntry(req.params.id, req.params.dayId, merged);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/:id/days/batch', verifyToken, requireTripMember, (req, res) => {
+router.post('/:id/days/batch', verifyToken, requireTripEditAccess, (req, res) => {
   try {
     const { days } = req.body;
     if (!Array.isArray(days) || days.length === 0) {
@@ -321,7 +379,7 @@ router.post('/:id/days/batch', verifyToken, requireTripMember, (req, res) => {
   }
 });
 
-router.delete('/:id/days/:dayId', verifyToken, requireTripMember, (req, res) => {
+router.delete('/:id/days/:dayId', verifyToken, requireTripEditAccess, (req, res) => {
   try {
     const deleted = deleteDayEntry(req.params.id, req.params.dayId);
     if (!deleted) return res.status(404).json({ error: 'Day not found' });

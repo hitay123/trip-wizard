@@ -35,6 +35,8 @@ function fmtTrip(row) {
     visibility: row.visibility,
     tripCode: row.trip_code,
     creatorId: row.creator_id,
+    membersCanEdit: row.members_can_edit !== 0,
+    membersCanChat: row.members_can_chat !== 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     days: getDays(row.id),
@@ -68,12 +70,15 @@ export function createTrip(data) {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO trips (id, name, destination, start_date, end_date, travelers, notes, visibility, trip_code, creator_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trips (id, name, destination, start_date, end_date, travelers, notes, visibility, trip_code, creator_id, members_can_edit, members_can_chat, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, data.name, data.destination, data.startDate, data.endDate,
     JSON.stringify(data.travelers || []), data.notes || '',
-    data.visibility || 'public', code, data.creatorId || null, now, now
+    data.visibility || 'public', code, data.creatorId || null,
+    data.membersCanEdit !== false ? 1 : 0,
+    data.membersCanChat !== false ? 1 : 0,
+    now, now
   );
 
   // Auto-add creator as trip admin member
@@ -88,12 +93,15 @@ export function updateTrip(id, data) {
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE trips
-    SET name=?, destination=?, start_date=?, end_date=?, travelers=?, notes=?, visibility=?, updated_at=?
+    SET name=?, destination=?, start_date=?, end_date=?, travelers=?, notes=?, visibility=?, members_can_edit=?, members_can_chat=?, updated_at=?
     WHERE id=?
   `).run(
     data.name, data.destination, data.startDate, data.endDate,
     JSON.stringify(data.travelers || []), data.notes || '',
-    data.visibility || 'public', now, id
+    data.visibility || 'public',
+    data.membersCanEdit !== false ? 1 : 0,
+    data.membersCanChat !== false ? 1 : 0,
+    now, id
   );
   return getTripById(id);
 }
@@ -144,11 +152,15 @@ export function deleteDayEntry(tripId, dayId) {
 
 export function getTripMembers(tripId) {
   return db.prepare(`
-    SELECT u.id, u.name, u.email, tm.role, tm.joined_at
+    SELECT u.id, u.name, u.first_name, u.last_name, u.email, tm.role, tm.joined_at
     FROM trip_members tm JOIN users u ON tm.user_id = u.id
     WHERE tm.trip_id = ?
     ORDER BY tm.joined_at ASC
   `).all(tripId);
+}
+
+export function setMemberRole(tripId, userId, role) {
+  db.prepare('UPDATE trip_members SET role = ? WHERE trip_id = ? AND user_id = ?').run(role, tripId, userId);
 }
 
 export function isTripMember(tripId, userId) {
@@ -216,7 +228,7 @@ export function markNotificationRead(id, userId) {
 
 export function getMessages(tripId, chatType, limit = 50) {
   return db.prepare(`
-    SELECT m.*, u.name as user_name
+    SELECT m.*, u.name as user_name, u.first_name as user_first_name, u.last_name as user_last_name
     FROM messages m
     LEFT JOIN users u ON m.user_id = u.id
     WHERE m.trip_id = ? AND m.chat_type = ?
@@ -231,7 +243,7 @@ export function saveMessage(tripId, userId, chatType, content) {
     id, tripId, userId, chatType, content
   );
   return db.prepare(`
-    SELECT m.*, u.name as user_name
+    SELECT m.*, u.name as user_name, u.first_name as user_first_name, u.last_name as user_last_name
     FROM messages m LEFT JOIN users u ON m.user_id = u.id
     WHERE m.id = ?
   `).get(id);
@@ -240,7 +252,7 @@ export function saveMessage(tripId, userId, chatType, content) {
 // ── Users (for admin) ─────────────────────────────────────────────────────────
 
 export function getAllUsers() {
-  return db.prepare('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC').all();
+  return db.prepare('SELECT id, name, first_name, last_name, email, role, created_at FROM users ORDER BY created_at DESC').all();
 }
 
 export function deleteUser(id) {

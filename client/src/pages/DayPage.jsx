@@ -3,11 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { getTrip, updateDay } from '../utils/api.js';
 import { useChat } from '../context/ChatContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import WeatherWidget from '../components/WeatherWidget.jsx';
 import PlacesPanel from '../components/PlacesPanel.jsx';
 import Timeline from '../components/Timeline.jsx';
 
-function ActivityEditor({ day, tripId, onSave }) {
+function ActivityEditor({ day, tripId, onSave, currentUser, canEdit }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', time: '', duration: '', notes: '' });
   const [saving, setSaving] = useState(false);
@@ -21,6 +22,10 @@ function ActivityEditor({ day, tripId, onSave }) {
       const newActivity = {
         id: Math.random().toString(36).slice(2) + Date.now().toString(36),
         ...form,
+        addedById: currentUser?.id || null,
+        addedByName: currentUser
+          ? (currentUser.firstName || currentUser.name?.split(' ')[0] || 'Unknown')
+          : null,
       };
       const updated = await updateDay(tripId, day.id, {
         activities: [...(day.activities || []), newActivity],
@@ -53,12 +58,14 @@ function ActivityEditor({ day, tripId, onSave }) {
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-slate-800">Activities</h3>
-        <button onClick={() => setAdding(!adding)} className="btn-secondary text-xs px-3 py-1.5">
-          {adding ? 'Cancel' : '+ Add'}
-        </button>
+        {canEdit && (
+          <button onClick={() => setAdding(!adding)} className="btn-secondary text-xs px-3 py-1.5">
+            {adding ? 'Cancel' : '+ Add'}
+          </button>
+        )}
       </div>
 
-      {adding && (
+      {adding && canEdit && (
         <div className="bg-slate-50 rounded-xl p-3 space-y-2">
           <input className="input text-sm" value={form.name} onChange={set('name')} placeholder="Activity name *" />
           <div className="grid grid-cols-2 gap-2">
@@ -81,21 +88,28 @@ function ActivityEditor({ day, tripId, onSave }) {
                 {a.time && <span className="text-blue-600 font-mono text-xs w-10 shrink-0">{a.time}</span>}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{a.name}</p>
-                  {a.notes && <p className="text-xs text-slate-400 truncate">{a.notes}</p>}
+                  <div className="flex items-center gap-2">
+                    {a.notes && <p className="text-xs text-slate-400 truncate">{a.notes}</p>}
+                    {a.addedByName && (
+                      <span className="text-xs text-slate-300 shrink-0">· added by {a.addedByName}</span>
+                    )}
+                  </div>
                 </div>
                 {a.duration && <span className="text-xs text-slate-400 shrink-0">{a.duration}m</span>}
-                <button
-                  onClick={() => handleRemove(a.id)}
-                  disabled={saving}
-                  className="text-slate-300 hover:text-red-400 transition text-sm shrink-0"
-                >
-                  ✕
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleRemove(a.id)}
+                    disabled={saving}
+                    className="text-slate-300 hover:text-red-400 transition text-sm shrink-0"
+                  >
+                    ✕
+                  </button>
+                )}
               </li>
             ))}
         </ul>
       ) : !adding ? (
-        <p className="text-sm text-slate-400 text-center py-3">No activities yet — add some above!</p>
+        <p className="text-sm text-slate-400 text-center py-3">No activities yet{canEdit ? ' — add some above!' : '.'}</p>
       ) : null}
     </div>
   );
@@ -103,6 +117,7 @@ function ActivityEditor({ day, tripId, onSave }) {
 
 export default function DayPage() {
   const { tripId, dayId } = useParams();
+  const { user } = useAuth();
   const [trip, setTrip] = useState(null);
   const [day, setDay] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -137,6 +152,10 @@ export default function DayPage() {
       </div>
     );
   }
+
+  const isMember = user && trip.members?.some((m) => m.id === user.id);
+  const isAdmin = user && (trip.creatorId === user.id || trip.members?.some((m) => m.id === user.id && m.role === 'admin'));
+  const canEdit = isAdmin || (isMember && trip.membersCanEdit);
 
   const location = day.location || trip.destination;
   const parsedDate = parseISO(day.date);
@@ -204,7 +223,13 @@ export default function DayPage() {
       <div className="lg:grid lg:grid-cols-2 lg:gap-5 space-y-5 lg:space-y-0">
         {/* Left: Plan + Timeline */}
         <div className={`space-y-5 ${activeTab !== 'plan' ? 'hidden lg:block' : ''}`}>
-          <ActivityEditor day={day} tripId={tripId} onSave={handleDayUpdate} />
+          <ActivityEditor
+            day={day}
+            tripId={tripId}
+            onSave={handleDayUpdate}
+            currentUser={user}
+            canEdit={canEdit}
+          />
           <Timeline day={day} tripId={tripId} />
           {day.notes && (
             <div className="card">

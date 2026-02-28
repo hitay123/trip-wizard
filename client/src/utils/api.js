@@ -15,6 +15,7 @@ export const getTrip = (id) => api.get(`/trips/${id}`).then((r) => r.data);
 export const createTrip = (data) => api.post('/trips', data).then((r) => r.data);
 export const updateTrip = (id, data) => api.put(`/trips/${id}`, data).then((r) => r.data);
 export const deleteTrip = (id) => api.delete(`/trips/${id}`).then((r) => r.data);
+export const updateTripSettings = (id, data) => api.patch(`/trips/${id}/settings`, data).then((r) => r.data);
 
 // --- Members & join requests ---
 export const requestJoin = (tripId) => api.post(`/trips/${tripId}/request-join`).then((r) => r.data);
@@ -24,6 +25,8 @@ export const resolveJoinRequest = (tripId, requestId, action) =>
   api.patch(`/trips/${tripId}/requests/${requestId}`, { action }).then((r) => r.data);
 export const removeMember = (tripId, userId) =>
   api.delete(`/trips/${tripId}/members/${userId}`).then((r) => r.data);
+export const setMemberRole = (tripId, userId, role) =>
+  api.patch(`/trips/${tripId}/members/${userId}/role`, { role }).then((r) => r.data);
 
 // --- Day Entries ---
 export const addDay = (tripId, data) => api.post(`/trips/${tripId}/days`, data).then((r) => r.data);

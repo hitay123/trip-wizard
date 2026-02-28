@@ -58,32 +58,49 @@ function buildSystemPrompt(trip, dayEntry, weather) {
 
   const planInstructions = `
 
-## Generating Multi-Day Plans
-When the user asks you to create a plan, itinerary, or schedule for multiple days, respond with your recommendation text AND include a structured JSON plan at the END of your response, wrapped in [PLAN_START] and [PLAN_END] markers:
+## Generating Trip Plans
+When the user asks you to create a plan, itinerary, schedule, add activities, or add days, respond with a brief intro AND include THREE different plan variations at the END of your response, each with a different style/budget/pace. Choose label names that capture the key difference (e.g., "Budget & Relaxed", "Cultural & Active", "Luxury & Indulgent" — or "Rainy Day Indoor", "Outdoor Adventure", "Local Hidden Gems" depending on context).
 
-[PLAN_START]
-{
-  "title": "Short plan title",
-  "days": [
-    {
-      "date": "YYYY-MM-DD",
-      "location": "City / area",
-      "accommodation": { "name": "Hotel or hostel name" },
-      "activities": [
-        { "name": "Activity name", "time": "HH:MM", "duration": 90, "notes": "Brief tip or reason" }
-      ],
-      "notes": "Theme or summary for the day"
+Wrap all three in [PLANS_START] and [PLANS_END] markers:
+
+[PLANS_START]
+[
+  {
+    "label": "Budget & Relaxed",
+    "plan": {
+      "title": "Short plan title",
+      "days": [
+        {
+          "date": "YYYY-MM-DD",
+          "location": "City / area",
+          "accommodation": { "name": "Hotel or hostel name" },
+          "activities": [
+            { "name": "Activity name", "time": "HH:MM", "duration": 90, "notes": "Brief tip" }
+          ],
+          "notes": "Theme or summary for the day"
+        }
+      ]
     }
-  ]
-}
-[PLAN_END]
+  },
+  {
+    "label": "Cultural & Active",
+    "plan": { "title": "...", "days": [...] }
+  },
+  {
+    "label": "Luxury & Indulgent",
+    "plan": { "title": "...", "days": [...] }
+  }
+]
+[PLANS_END]
 
-Rules for the plan JSON:
+Rules for each plan:
 - Only use dates from the "Available (unplanned) dates" list above
 - Use the trip's destination and known locations
 - Include 3–6 realistic activities per day with sensible times (09:00–21:00)
 - Duration is in minutes
-- The user will review and approve the plan before it is added to their itinerary`;
+- Make the three plans genuinely distinct: vary the cost, pace, activity types, and experiences
+- Adapt labels to what was requested: if weather-related, vary by indoor/outdoor; if budget was mentioned, vary by cost; otherwise vary by experience style
+- The user will review and choose which plan to add to their itinerary`;
 
   return `You are Trip Wizard, an expert travel assistant helping travelers have the best possible experience.
 
@@ -135,7 +152,6 @@ export async function chatWithAssistant({ messages, trip, dayEntry, weather }) {
         continue;
       }
       if (isQuotaError(err)) {
-        // All models exhausted — return graceful degradation
         console.warn('[Gemini] All models quota exceeded, falling back to mock');
         return {
           content:
@@ -207,6 +223,21 @@ Consider: opening hours (most museums open 9-10am), meal times, weather windows 
 }
 
 function parsePlanFromResponse(text) {
+  // Try multi-plan format first [PLANS_START]...[PLANS_END]
+  const plansMatch = text.match(/\[PLANS_START\]([\s\S]*?)\[PLANS_END\]/);
+  if (plansMatch) {
+    try {
+      const plansData = JSON.parse(plansMatch[1].trim());
+      if (Array.isArray(plansData) && plansData.length > 0) {
+        const content = text.replace(/\[PLANS_START\][\s\S]*?\[PLANS_END\]/, '').trim();
+        return { content, plans: plansData };
+      }
+    } catch (e) {
+      console.warn('[Gemini] Failed to parse plans JSON:', e.message);
+    }
+  }
+
+  // Fallback: single plan format [PLAN_START]...[PLAN_END]
   const planMatch = text.match(/\[PLAN_START\]([\s\S]*?)\[PLAN_END\]/);
   if (!planMatch) return { content: text };
   let plan = null;
